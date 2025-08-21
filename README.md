@@ -1,0 +1,2088 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>โตโต้อาหารอิ่มจัง! - ระบบจัดการร้านอาหาร</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body { font-family: 'Kanit', sans-serif; }
+        .kanit { font-family: 'Kanit', sans-serif; }
+        .sidebar-icon { stroke-width: 1.5; }
+        .table-occupied { background-color: #FECACA; border-color: #F87171; }
+        .table-vacant { background-color: #D1FAE5; border-color: #34D399; }
+        .table-billing { background-color: #FEF3C7; border-color: #FBBF24; }
+        .kitchen-ticket { box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
+        .modal-backdrop { background-color: rgba(0,0,0,0.5); }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem;
+            color: white;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .toast.show { opacity: 1; }
+        .toast.success { background-color: #22c55e; }
+        .toast.error { background-color: #ef4444; }
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #receipt-content, #receipt-content * {
+                visibility: visible;
+            }
+            #receipt-content {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            .print-hidden {
+                display: none !important;
+            }
+            .print-block {
+                display: block !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <!-- Welcome & Login Pages (unchanged) -->
+    <div id="welcome-page" class="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-orange-400 to-red-500 text-white">
+        <i data-lucide="utensils-crossed" class="w-24 h-24 mb-6"></i>
+        <h1 class="text-5xl font-bold kanit mb-4">โตโต้อาหารอิ่มจัง!</h1>
+        <p class="text-xl kanit mb-8">ระบบจัดการร้านอาหารอัจริยะ</p>
+        <button onclick="showPage('login-page')" class="bg-white text-orange-500 font-bold kanit py-3 px-8 rounded-full text-lg shadow-lg hover:bg-gray-200 transition-transform transform hover:scale-105">
+            เริ่มต้นใช้งาน
+        </button>
+    </div>
+
+    <div id="login-page" class="hidden flex flex-col items-center justify-center h-screen bg-gray-100">
+        <div class="w-full max-w-sm p-8 bg-white rounded-2xl shadow-xl">
+            <div class="flex justify-center mb-6"><i data-lucide="chef-hat" class="w-16 h-16 text-orange-500"></i></div>
+            <h2 class="text-3xl font-bold text-center text-gray-800 kanit mb-2">ลงชื่อเข้าสู่ระบบ</h2>
+            <p class="text-center text-gray-500 kanit mb-8">สำหรับพนักงาน</p>
+            <form onsubmit="handleLogin(event)">
+                <div class="mb-4">
+                    <label for="username" class="block text-gray-700 kanit font-medium mb-2">ชื่อผู้ใช้</label>
+                    <input type="text" id="username" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="ชื่อผู้ใช้" required>
+                </div>
+                <div class="mb-6">
+                    <label for="password" class="block text-gray-700 kanit font-medium mb-2">รหัสผ่าน</label>
+                    <input type="password" id="password" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="••••••••" required>
+                </div>
+                <button type="submit" class="w-full bg-orange-500 text-white font-bold kanit py-3 rounded-lg hover:bg-orange-600 transition-colors">เข้าสู่ระบบ</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Application -->
+    <div id="main-app" class="hidden">
+        <div class="flex h-screen bg-gray-200">
+            <!-- Sidebar -->
+            <div class="w-64 bg-white shadow-md flex flex-col">
+                <div class="p-4 border-b flex items-center space-x-3">
+                    <i data-lucide="utensils-crossed" class="w-8 h-8 text-orange-500"></i>
+                    <span class="text-xl font-bold kanit text-gray-800">โตโต้อาหารอิ่มจัง!</span>
+                </div>
+                <nav id="sidebar-nav" class="flex-1 px-2 py-4 space-y-2 overflow-y-auto">
+                    <!-- Nav links will be populated by JS -->
+                </nav>
+                <div class="p-4 border-t">
+                     <a href="#" onclick="logout()" class="flex items-center px-4 py-2 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 transition-colors">
+                        <i data-lucide="log-out" class="w-6 h-6 mr-3 sidebar-icon"></i> <span class="kanit">ออกจากระบบ</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <main id="main-content-area" class="flex-1 p-6 overflow-y-auto">
+                <!-- Content will be populated by JS -->
+            </main>
+        </div>
+    </div>
+
+    <!-- Modals & Toasts -->
+    <div id="modal-container"></div>
+    <div id="toast-container"></div>
+
+    <script>
+    // ===================================================================================
+    // MOCK DATABASE
+    // ===================================================================================
+    let db = {
+        menuItems: [
+            { id: 1, name: 'ผัดกะเพราหมูกรอบ', category: 'อาหารจานเดียว', price: 80, available: true, img: 'https://placehold.co/100x70/f97316/ffffff?text=กะเพรา' },
+            { id: 2, name: 'ต้มยำกุ้ง', category: 'ประเภทต้ม', price: 150, available: true, img: 'https://placehold.co/100x70/22c55e/ffffff?text=ต้มยำ' },
+            { id: 3, name: 'ชาไทย', category: 'เครื่องดื่ม', price: 50, available: false, img: 'https://placehold.co/100x70/ef4444/ffffff?text=ชาไทย' },
+            { id: 4, name: 'ข้าวผัดปู', category: 'อาหารจานเดียว', price: 90, available: true, img: 'https://placehold.co/100x70/3b82f6/ffffff?text=ข้าวผัด' },
+        ],
+        tables: [
+            { id: 1, name: 'โต๊ะ 1', status: 'vacant', order: [] }, { id: 2, name: 'โต๊ะ 2', status: 'occupied', order: [{itemId: 1, qty: 2, note: 'เผ็ดน้อย'}, {itemId: 2, qty: 1, note: ''}] },
+            { id: 3, name: 'โต๊ะ 3', status: 'billing', order: [{itemId: 4, qty: 1, note: ''}] }, { id: 4, name: 'โต๊ะ 4', status: 'vacant', order: [] },
+            { id: 5, name: 'โต๊ะ 5', status: 'occupied', order: [{itemId: 1, qty: 1, note: ''}] }, { id: 6, name: 'โต๊ะ 6', status: 'vacant', order: [] },
+        ],
+        users: [
+            { id: 1, name: 'ศฤทธิ์ คำเพียร', username: 'toto', password: '112233', role: 'admin', active: true },
+            { id: 2, name: 'สมศรี มีสุข', username: 'cashier', password: 'password', role: 'cashier', active: true },
+            { id: 3, name: 'มานะ อดทน', username: 'waiter', password: 'password', role: 'waiter', active: true },
+            { id: 4, name: 'สมปอง ทำครัว', username: 'kitchen_staff', password: 'password', role: 'kitchen_staff', active: true },
+        ],
+        stock: [
+            { id: 1, name: 'เนื้อหมู', remaining: 15.5, unit: 'กก.', lowStock: 5 },
+            { id: 2, name: 'ใบกะเพรา', remaining: 0.8, unit: 'กก.', lowStock: 1 },
+            { id: 3, name: 'ไข่ไก่', remaining: 5, unit: 'แผง', lowStock: 2 },
+            { id: 4, name: 'น้ำมันพืช', remaining: 0, unit: 'ขวด', lowStock: 1 },
+        ],
+        stockHistory: [
+            { id: 1, stockId: 1, userId: 1, action: 'รับเข้า', amount: 20, timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) },
+            { id: 2, stockId: 2, userId: 1, action: 'รับเข้า', amount: 2, timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) },
+            { id: 3, stockId: 1, userId: 1, action: 'เบิกใช้ (ออเดอร์)', amount: -0.5, timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) },
+        ],
+        orders: [
+             { id: 1, tableId: 2, userId: 1, items: [{itemId: 1, qty: 2, note: 'เผ็ดน้อย'}, {itemId: 2, qty: 1, note: ''}], status: 'cooking', timestamp: new Date(Date.now() - 8 * 60 * 1000), total: 310 },
+             { id: 2, tableId: 5, userId: 1, items: [{itemId: 1, qty: 1, note: ''}], status: 'new', timestamp: new Date(Date.now() - 2 * 60 * 1000), total: 80 },
+             { id: 3, type: 'takeaway', takeawayId: 12, userId: 1, items: [{itemId: 4, qty: 1, note: ''}], status: 'done', timestamp: new Date(Date.now() - 15 * 60 * 1000), total: 90 },
+             { id: 4, tableId: 1, userId: 1, items: [{itemId: 2, qty: 1, note: ''}], status: 'delivered', timestamp: new Date(Date.now() - 20 * 60 * 1000), total: 150 },
+             { id: 5, type: 'online', takeawayId: 13, userId: 1, items: [{itemId: 4, qty: 2, note: ''}], status: 'paid', timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), total: 180, paymentMethod: 'qr' },
+             { id: 6, tableId: 3, userId: 1, items: [{itemId: 1, qty: 1}, {itemId: 4, qty: 1}], status: 'paid', timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), total: 170, customerName: 'บริษัท ทดสอบ จำกัด', customerAddress: '123 ถ.สุขุมวิท กรุงเทพฯ', customerTaxId: '0123456789012', paymentMethod: 'cash' },
+        ]
+    };
+
+    // ===================================================================================
+    // STATE MANAGEMENT
+    // ===================================================================================
+    let state = {
+        currentUserRole: null,
+        activeTab: 'dashboard',
+        cart: [],
+        activeTableId: null,
+        orderType: 'table',
+        kitchenTimerInterval: null,
+        billingTableId: null,
+        billingOrderId: null,
+        qrCodeImage: 'https://placehold.co/300x300/ffffff/000000?text=QR+Code'
+    };
+
+    const ROLES = {
+        admin: { name: 'Admin', perms: ['dashboard', 'menu', 'orders', 'kitchen', 'tables', 'billing', 'reports', 'stock', 'users', 'roles'] },
+        kitchen_staff: { name: 'Kitchen', perms: ['menu', 'kitchen', 'stock'] },
+        waiter: { name: 'Waiter', perms: ['menu', 'orders', 'tables'] },
+        cashier: { name: 'Cashier', perms: ['menu', 'orders', 'tables', 'billing'] }
+    };
+
+    const NAV_ITEMS = {
+        dashboard: { icon: 'layout-dashboard', text: 'แดชบอร์ด' }, menu: { icon: 'book-open', text: 'จัดการเมนู' },
+        orders: { icon: 'clipboard-list', text: 'ระบบสั่งอาหาร' }, kitchen: { icon: 'soup', text: 'จัดการครัว' },
+        tables: { icon: 'armchair', text: 'จัดการโต๊ะ' }, billing: { icon: 'receipt', text: 'ระบบชำระเงิน' },
+        reports: { icon: 'bar-chart-3', text: 'รายงานยอดขาย' }, stock: { icon: 'boxes', text: 'สต๊อกวัตถุดิบ' },
+        users: { icon: 'users', text: 'จัดการผู้ใช้งาน' }, roles: { icon: 'shield-check', text: 'จัดการบทบาท' },
+    };
+
+    // ===================================================================================
+    // RENDER FUNCTIONS
+    // ===================================================================================
+    function renderAll() {
+        renderSidebar();
+        renderContent(state.activeTab);
+    }
+
+    function renderSidebar() {
+        const userPerms = ROLES[state.currentUserRole]?.perms || [];
+        const navContainer = document.getElementById('sidebar-nav');
+        navContainer.innerHTML = userPerms.map(key => {
+            const item = NAV_ITEMS[key];
+            return `
+                <a href="#" data-nav="${key}" onclick="renderContent('${key}')" class="flex items-center px-4 py-2 text-gray-700 rounded-lg hover:bg-orange-100 hover:text-orange-600 transition-colors">
+                    <i data-lucide="${item.icon}" class="w-6 h-6 mr-3 sidebar-icon"></i> <span class="kanit">${item.text}</span>
+                </a>`;
+        }).join('');
+        lucide.createIcons();
+    }
+
+    function renderContent(tabKey) {
+        if (state.kitchenTimerInterval) {
+            clearInterval(state.kitchenTimerInterval);
+            state.kitchenTimerInterval = null;
+        }
+
+        if (!(ROLES[state.currentUserRole]?.perms.includes(tabKey))) {
+            tabKey = 'dashboard';
+        }
+        if (tabKey !== 'orders') {
+            state.cart = [];
+            state.activeTableId = null;
+        }
+        if (tabKey !== 'billing') {
+            state.billingTableId = null;
+            state.billingOrderId = null;
+        }
+        state.activeTab = tabKey;
+        const contentArea = document.getElementById('main-content-area');
+        let content = '';
+
+        switch(tabKey) {
+            case 'dashboard': content = getDashboardHTML(); break;
+            case 'menu': content = getMenuHTML(); break;
+            case 'orders': content = getOrdersHTML(); break;
+            case 'users': content = getUsersHTML(); break;
+            case 'roles': content = getRolesHTML(); break;
+            case 'tables': content = getTablesHTML(); break;
+            case 'kitchen': content = getKitchenHTML(); break;
+            case 'billing': content = getBillingHTML(); break;
+            case 'stock': content = getStockHTML(); break;
+            case 'reports': content = getReportsHTML(); break;
+            default: content = `<div class="bg-white p-6 rounded-lg shadow"><h1 class="text-2xl kanit">${NAV_ITEMS[tabKey]?.text || 'ไม่พบหน้า'}</h1><p class="kanit">เนื้อหาสำหรับหน้านี้จะแสดงที่นี่</p></div>`;
+        }
+        contentArea.innerHTML = content;
+        lucide.createIcons();
+        if (tabKey === 'dashboard') setupDashboardCharts();
+        if (tabKey === 'kitchen') startKitchenTimers();
+        if (tabKey === 'reports') setupReportCharts();
+    }
+
+    // HTML Generators for each tab
+    function getDashboardHTML() {
+        const data = getDashboardData();
+        return `
+            <h1 class="text-3xl font-bold text-gray-800 kanit mb-6">ภาพรวมวันนี้</h1>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                <div class="bg-white p-6 rounded-lg shadow flex items-center justify-between"><div><p class="text-sm text-gray-500 kanit">ยอดขายวันนี้</p><p class="text-3xl font-bold text-gray-800">฿${data.salesToday.toLocaleString()}</p></div><div class="bg-blue-100 p-3 rounded-full"><i data-lucide="dollar-sign" class="w-6 h-6 text-blue-500"></i></div></div>
+                <div class="bg-white p-6 rounded-lg shadow flex items-center justify-between"><div><p class="text-sm text-gray-500 kanit">ออเดอร์วันนี้</p><p class="text-3xl font-bold text-gray-800">${data.totalOrdersToday}</p></div><div class="bg-green-100 p-3 rounded-full"><i data-lucide="shopping-cart" class="w-6 h-6 text-green-500"></i></div></div>
+                <div class="bg-white p-6 rounded-lg shadow flex items-center justify-between"><div><p class="text-sm text-gray-500 kanit">โต๊ะที่ใช้งาน</p><p class="text-3xl font-bold text-gray-800">${data.occupiedTables} / ${data.totalTables}</p></div><div class="bg-yellow-100 p-3 rounded-full"><i data-lucide="armchair" class="w-6 h-6 text-yellow-500"></i></div></div>
+                <div class="bg-white p-6 rounded-lg shadow flex items-center justify-between"><div><p class="text-sm text-gray-500 kanit">ออเดอร์ในครัว</p><p class="text-3xl font-bold text-gray-800">${data.pendingOrders}</p></div><div class="bg-red-100 p-3 rounded-full"><i data-lucide="soup" class="w-6 h-6 text-red-500"></i></div></div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                <div class="lg:col-span-3 bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-xl font-bold text-gray-700 kanit mb-4">แนวโน้มยอดขาย 7 วันล่าสุด</h2>
+                    <canvas id="dashboardSalesChart"></canvas>
+                </div>
+                <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow">
+                     <h2 class="text-xl font-bold text-gray-700 kanit mb-4">ยอดขายตามหมวดหมู่</h2>
+                    <canvas id="dashboardCategoryChart"></canvas>
+                </div>
+            </div>
+            `;
+    }
+
+    function getMenuHTML() {
+        const rows = db.menuItems.map(item => `
+            <tr class="border-b hover:bg-gray-50">
+                <td class="p-4"><img src="${item.img}" class="w-24 h-16 object-cover rounded-md" alt="${item.name}" onerror="this.onerror=null;this.src='https://placehold.co/100x70/cccccc/ffffff?text=Image+Error';"></td>
+                <td class="p-4 kanit font-medium text-gray-800">${item.name}</td>
+                <td class="p-4 kanit text-gray-600">${item.category}</td>
+                <td class="p-4 kanit text-gray-600">฿${item.price}</td>
+                <td class="p-4">
+                    <span class="px-3 py-1 text-sm rounded-full ${item.available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} kanit">${item.available ? 'มีจำหน่าย' : 'หมด'}</span>
+                </td>
+                <td class="p-4 flex space-x-2">
+                    <button onclick="toggleMenuAvailability(${item.id})" class="p-2 text-yellow-500 hover:bg-yellow-100 rounded-full" title="สลับสถานะ"><i data-lucide="refresh-cw"></i></button>
+                    <button onclick="showMenuModal(${item.id})" class="p-2 text-blue-500 hover:bg-blue-100 rounded-full" title="แก้ไข"><i data-lucide="edit"></i></button>
+                    <button onclick="deleteMenuItem(${item.id})" class="p-2 text-red-500 hover:bg-red-100 rounded-full" title="ลบ"><i data-lucide="trash-2"></i></button>
+                </td>
+            </tr>
+        `).join('');
+
+        return `
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold text-gray-800 kanit">จัดการเมนูอาหาร</h1>
+                <button onclick="showMenuModal()" class="bg-orange-500 text-white font-bold kanit py-2 px-4 rounded-lg flex items-center hover:bg-orange-600"><i data-lucide="plus" class="w-5 h-5 mr-2"></i> เพิ่มเมนูใหม่</button>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow overflow-x-auto">
+                <table class="w-full text-left min-w-max">
+                    <thead><tr class="border-b"><th class="p-4 kanit font-semibold">รูปภาพ</th><th class="p-4 kanit font-semibold">ชื่อเมนู</th><th class="p-4 kanit font-semibold">หมวดหมู่</th><th class="p-4 kanit font-semibold">ราคา</th><th class="p-4 kanit font-semibold">สถานะ</th><th class="p-4 kanit font-semibold">จัดการ</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    }
+
+    function getOrdersHTML() {
+        const menuByCategory = db.menuItems.reduce((acc, item) => {
+            if (item.available) {
+                (acc[item.category] = acc[item.category] || []).push(item);
+            }
+            return acc;
+        }, {});
+
+        const menuListHTML = Object.entries(menuByCategory).map(([category, items]) => `
+            <div class="mb-6">
+                <h3 class="text-xl font-semibold kanit text-gray-700 mb-3">${category}</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    ${items.map(item => `
+                        <div class="border rounded-lg p-3 flex flex-col items-center text-center bg-white hover:shadow-md transition-shadow cursor-pointer" onclick="addToCart(${item.id})">
+                            <img src="${item.img}" class="w-full h-24 object-cover rounded-md mb-2" alt="${item.name}" onerror="this.onerror=null;this.src='https://placehold.co/100x70/cccccc/ffffff?text=Image+Error';">
+                            <p class="font-medium kanit text-sm flex-grow">${item.name}</p>
+                            <p class="font-semibold kanit text-orange-600">฿${item.price}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('');
+
+        const cartItemsHTML = state.cart.map(cartItem => {
+            const menuItem = db.menuItems.find(m => m.id === cartItem.itemId);
+            return `
+                <div class="flex items-center justify-between py-2 border-b">
+                    <div>
+                        <p class="font-medium kanit">${menuItem.name}</p>
+                        <p class="text-sm text-gray-500 kanit">฿${menuItem.price}</p>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <button onclick="updateCartQuantity(${cartItem.itemId}, -1)" class="p-1 rounded-full bg-gray-200 hover:bg-gray-300"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                        <span class="font-semibold w-4 text-center">${cartItem.qty}</span>
+                        <button onclick="updateCartQuantity(${cartItem.itemId}, 1)" class="p-1 rounded-full bg-gray-200 hover:bg-gray-300"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                        <button onclick="removeFromCart(${cartItem.itemId})" class="p-1 text-red-500 hover:text-red-700"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const subtotal = state.cart.reduce((total, cartItem) => {
+            const menuItem = db.menuItems.find(m => m.id === cartItem.itemId);
+            return total + (menuItem.price * cartItem.qty);
+        }, 0);
+        
+        const total = subtotal;
+
+        let orderTitle = '';
+        if (state.orderType === 'table' && state.activeTableId) {
+            const table = db.tables.find(t => t.id === state.activeTableId);
+            orderTitle = `ออเดอร์สำหรับ: ${table.name}`;
+        } else if (state.orderType === 'takeaway') {
+            orderTitle = 'ออเดอร์สำหรับ: ลูกค้าซื้อกลับบ้าน';
+        } else if (state.orderType === 'online') {
+            orderTitle = 'ออเดอร์สำหรับ: ลูกค้าสั่งออนไลน์';
+        }
+
+        return `
+            <h1 class="text-3xl font-bold text-gray-800 kanit mb-6">ระบบสั่งอาหาร (POS)</h1>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow overflow-y-auto" style="height: calc(100vh - 12rem);">
+                    ${menuListHTML}
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-2xl font-bold kanit mb-4 border-b pb-2">ออเดอร์ปัจจุบัน</h2>
+                    
+                    <div class="mb-4 bg-gray-100 p-3 rounded-lg">
+                        <p class="font-semibold kanit text-gray-800">${orderTitle}</p>
+                    </div>
+
+                    <div id="cart-items" class="mb-4 max-h-[calc(100vh-28rem)] overflow-y-auto">
+                        ${state.cart.length > 0 ? cartItemsHTML : '<p class="text-gray-500 kanit text-center py-8">ยังไม่มีสินค้าในตะกร้า</p>'}
+                    </div>
+                    <div class="border-t pt-4 space-y-2">
+                        <div class="flex justify-between kanit font-bold text-xl text-gray-800"><p>ยอดสุทธิ</p><span>฿${total.toFixed(2)}</span></div>
+                    </div>
+                    <button onclick="submitOrder()" class="w-full mt-6 bg-orange-500 text-white font-bold kanit py-3 rounded-lg hover:bg-orange-600 disabled:bg-gray-400" ${state.cart.length === 0 ? 'disabled' : ''}>
+                        ยืนยันออเดอร์
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+    
+    function getTablesHTML() {
+        const specialCards = `
+            <div onclick="handleTakeawayClick()" class="bg-blue-100 border-2 border-blue-400 rounded-lg p-4 text-center cursor-pointer hover:shadow-lg transition-shadow h-full flex flex-col justify-center">
+                <i data-lucide="shopping-bag" class="w-12 h-12 mx-auto mb-2 text-blue-600"></i>
+                <p class="font-bold text-lg kanit text-blue-800">ซื้อกลับบ้าน</p>
+                <p class="text-sm kanit text-blue-700">สร้างออเดอร์ใหม่</p>
+            </div>
+            <div onclick="handleOnlineClick()" class="bg-purple-100 border-2 border-purple-400 rounded-lg p-4 text-center cursor-pointer hover:shadow-lg transition-shadow h-full flex flex-col justify-center">
+                <i data-lucide="smartphone" class="w-12 h-12 mx-auto mb-2 text-purple-600"></i>
+                <p class="font-bold text-lg kanit text-purple-800">สั่งออนไลน์</p>
+                <p class="text-sm kanit text-purple-700">สร้างออเดอร์ใหม่</p>
+            </div>
+        `;
+
+        const tableCards = db.tables.map(table => {
+            const statusClasses = { vacant: 'table-vacant', occupied: 'table-occupied', billing: 'table-billing' };
+            const statusTexts = { vacant: 'ว่าง', occupied: 'มีลูกค้า', billing: 'รอชำระเงิน' };
+            const iconColors = { vacant: 'text-green-600', occupied: 'text-red-600', billing: 'text-yellow-600' };
+            const textColors = { vacant: 'text-green-800', occupied: 'text-red-800', billing: 'text-yellow-800' };
+            
+            const deleteButtonHTML = state.currentUserRole === 'admin' ? `
+                <button onclick="event.stopPropagation(); deleteTable(${table.id});" class="absolute top-2 right-2 p-1 bg-white/50 rounded-full text-red-500 hover:bg-red-100 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity" title="ลบโต๊ะ">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>` : '';
+
+            return `
+            <div class="relative group">
+                <div onclick="handleTableClick(${table.id})" class="${statusClasses[table.status]} border-2 rounded-lg p-4 text-center cursor-pointer hover:shadow-lg transition-shadow h-full flex flex-col justify-center">
+                    <i data-lucide="armchair" class="w-12 h-12 mx-auto mb-2 ${iconColors[table.status]}"></i>
+                    <p class="font-bold text-lg kanit ${textColors[table.status]}">${table.name}</p>
+                    <p class="text-sm kanit ${textColors[table.status].replace('800','700')}">${statusTexts[table.status]}</p>
+                </div>
+                ${deleteButtonHTML}
+            </div>`;
+        }).join('');
+        
+        const addTableButtonHTML = state.currentUserRole === 'admin' ? `
+            <button onclick="addTable()" class="bg-green-500 text-white font-bold kanit py-2 px-4 rounded-lg flex items-center hover:bg-green-600">
+                <i data-lucide="plus-circle" class="w-5 h-5 mr-2"></i> เพิ่มโต๊ะ
+            </button>` : '';
+
+        return `
+            <div class="flex justify-between items-center mb-6">
+                 <h1 class="text-3xl font-bold text-gray-800 kanit">จัดการโต๊ะและออเดอร์</h1>
+                 ${addTableButtonHTML}
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">${specialCards}${tableCards}</div>`;
+    }
+
+    function getKitchenHTML() {
+        const orders = db.orders.filter(o => o.status !== 'paid');
+
+        const statusOrder = ['new', 'cooking', 'done', 'delivered'];
+        const statusHeaders = {
+            new: 'สั่งใหม่ล่าสุด',
+            cooking: 'กำลังทำ',
+            done: 'ทำเสร็จแล้ว',
+            delivered: 'อาหารถึงลูกค้าแล้ว'
+        };
+
+        const groupedOrders = statusOrder.reduce((acc, status) => {
+            acc[status] = [];
+            return acc;
+        }, {});
+
+        orders.forEach(order => {
+            if (groupedOrders[order.status]) {
+                groupedOrders[order.status].push(order);
+            }
+        });
+
+        for (const status in groupedOrders) {
+            groupedOrders[status].sort((a, b) => b.timestamp - a.timestamp);
+        }
+
+        const renderTicket = (order) => {
+            let orderTitle = '';
+            if (order.type === 'takeaway') {
+                orderTitle = `ซื้อกลับบ้าน #${order.takeawayId}`;
+            } else if (order.type === 'online') {
+                orderTitle = `ออนไลน์ #${order.takeawayId}`;
+            } else {
+                const table = db.tables.find(t => t.id === order.tableId);
+                orderTitle = `โต๊ะ ${table?.name || 'N/A'}`;
+            }
+            
+            const user = db.users.find(u => u.id === order.userId);
+            const userName = user ? user.name : 'N/A';
+
+            const titleColor = order.type ? 'text-blue-600' : '';
+            const items = order.items.map(item => {
+                const menuItem = db.menuItems.find(m => m.id === item.itemId);
+                return `<p class="kanit"><span class="font-semibold">${item.qty}x</span> ${menuItem?.name || 'ไม่พบเมนู'} ${item.note ? `(${item.note})` : ''}</p>`;
+            }).join('');
+            
+            return `
+            <div class="bg-white rounded-lg p-4 kitchen-ticket flex flex-col">
+                <div class="flex justify-between items-center border-b pb-2 mb-2">
+                    <div>
+                        <h3 class="font-bold text-lg kanit ${titleColor}">${orderTitle}</h3>
+                        <p class="text-xs text-gray-500 kanit">สั่งโดย: ${userName}</p>
+                    </div>
+                    <span class="text-sm font-semibold kitchen-timer" data-timestamp="${order.timestamp.getTime()}"></span>
+                </div>
+                <div class="space-y-2 flex-grow">${items}</div>
+                <div class="mt-4 pt-2 border-t grid grid-cols-2 gap-2">
+                    <button onclick="updateOrderStatus(${order.id}, 'cooking')" class="w-full font-bold kanit py-2 rounded-lg text-sm ${order.status === 'cooking' ? 'bg-yellow-400 text-yellow-900' : 'bg-gray-200 text-gray-700 hover:bg-yellow-200'}">กำลังทำ</button>
+                    <button onclick="updateOrderStatus(${order.id}, 'done')" class="w-full font-bold kanit py-2 rounded-lg text-sm ${order.status === 'done' ? 'bg-green-400 text-green-900' : 'bg-gray-200 text-gray-700 hover:bg-green-200'}">เสร็จแล้ว</button>
+                    <button onclick="updateOrderStatus(${order.id}, 'delivered')" class="w-full font-bold kanit py-2 rounded-lg text-sm col-span-2 ${order.status === 'delivered' ? 'bg-blue-400 text-blue-900' : 'bg-gray-200 text-gray-700 hover:bg-blue-200'}">ถึงลูกค้าแล้ว</button>
+                </div>
+            </div>`;
+        };
+
+        let html = `<h1 class="text-3xl font-bold text-gray-800 kanit mb-6">จัดการครัว (Kitchen Display)</h1>`;
+
+        statusOrder.forEach(status => {
+            const ordersInStatus = groupedOrders[status];
+            if (ordersInStatus.length > 0) {
+                html += `
+                    <div class="mb-8">
+                        <h2 class="text-2xl font-semibold kanit text-gray-700 mb-4 pb-2 border-b-2 border-gray-300">${statusHeaders[status]}</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            ${ordersInStatus.map(renderTicket).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        });
+
+        if (orders.length === 0) {
+            html += '<p class="kanit text-gray-500">ไม่มีออเดอร์ที่ต้องทำในขณะนี้</p>';
+        }
+
+        return html;
+    }
+
+    function getBillingHTML() {
+        let mainContent;
+        if (state.billingTableId) {
+            const table = db.tables.find(t => t.id === state.billingTableId);
+            if (!table) {
+                state.billingTableId = null;
+                return getBillingHTML(); // Re-render the list view
+            }
+
+            let subtotal = 0;
+            const billItems = table.order.map(item => {
+                const menuItem = db.menuItems.find(m => m.id === item.itemId);
+                const itemTotal = (menuItem?.price || 0) * item.qty;
+                subtotal += itemTotal;
+                return `<div class="flex justify-between kanit"><p>${item.qty}x ${menuItem?.name || 'N/A'}</p><span>฿${itemTotal}</span></div>`;
+            }).join('');
+
+            mainContent = `
+                <div class="bg-white p-6 rounded-lg shadow max-w-md mx-auto">
+                    <button onclick="state.billingTableId = null; renderContent('billing');" class="text-sm text-blue-600 hover:underline mb-4 flex items-center"><i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> กลับไปหน้ารวมบิล</button>
+                    <h2 class="text-xl font-bold text-gray-700 kanit mb-4">บิล ${table.name}</h2>
+                    <div class="space-y-2 mb-4 border-b pb-4">${billItems}</div>
+                    <div class="space-y-2 mb-4">
+                        <div class="flex justify-between kanit text-gray-600"><p>ยอดรวม</p><span>฿${subtotal}</span></div>
+                        <div class="flex justify-between kanit font-bold text-lg"><p>ยอดสุทธิ</p><span>฿${subtotal}</span></div>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="showCashPaymentModal(${table.id}, ${subtotal}, 'table')" class="w-full bg-green-500 text-white font-bold kanit py-3 rounded-lg hover:bg-green-600">เงินสด</button>
+                        <button onclick="showQRCodeModal(${table.id}, ${subtotal}, 'table')" class="w-full bg-blue-500 text-white font-bold kanit py-3 rounded-lg hover:bg-blue-600">QR Code</button>
+                    </div>
+                </div>`;
+        } else if (state.billingOrderId) {
+            const order = db.orders.find(o => o.id === state.billingOrderId);
+            if (!order) {
+                state.billingOrderId = null;
+                return getBillingHTML();
+            }
+
+            let subtotal = 0;
+            const billItems = order.items.map(item => {
+                const menuItem = db.menuItems.find(m => m.id === item.itemId);
+                const itemTotal = (menuItem?.price || 0) * item.qty;
+                subtotal += itemTotal;
+                return `<div class="flex justify-between kanit"><p>${item.qty}x ${menuItem?.name || 'N/A'}</p><span>฿${itemTotal}</span></div>`;
+            }).join('');
+
+            let orderTitle = '';
+            if (order.type === 'takeaway') orderTitle = `ซื้อกลับบ้าน #${order.takeawayId}`;
+            else if (order.type === 'online') orderTitle = `ออนไลน์ #${order.takeawayId}`;
+
+            mainContent = `
+                <div class="bg-white p-6 rounded-lg shadow max-w-md mx-auto">
+                    <button onclick="state.billingOrderId = null; renderContent('billing');" class="text-sm text-blue-600 hover:underline mb-4 flex items-center"><i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> กลับไปหน้ารวมบิล</button>
+                    <h2 class="text-xl font-bold text-gray-700 kanit mb-4">บิล ${orderTitle}</h2>
+                    <div class="space-y-2 mb-4 border-b pb-4">${billItems}</div>
+                    <div class="space-y-2 mb-4">
+                        <div class="flex justify-between kanit text-gray-600"><p>ยอดรวม</p><span>฿${subtotal}</span></div>
+                        <div class="flex justify-between kanit font-bold text-lg"><p>ยอดสุทธิ</p><span>฿${subtotal}</span></div>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="showCashPaymentModal(${order.id}, ${subtotal}, 'order')" class="w-full bg-green-500 text-white font-bold kanit py-3 rounded-lg hover:bg-green-600">เงินสด</button>
+                        <button onclick="showQRCodeModal(${order.id}, ${subtotal}, 'order')" class="w-full bg-blue-500 text-white font-bold kanit py-3 rounded-lg hover:bg-blue-600">QR Code</button>
+                    </div>
+                </div>`;
+        } else {
+            const tablesToBill = db.tables.filter(t => t.status === 'billing');
+            const tableList = tablesToBill.map(table => {
+                const subtotal = table.order.reduce((sum, item) => sum + (item.qty * db.menuItems.find(m => m.id === item.itemId).price), 0);
+                return `<button onclick="state.billingTableId = ${table.id}; renderContent('billing');" class="w-full text-left p-4 border rounded-lg hover:bg-gray-50 flex justify-between items-center">
+                            <span class="font-bold kanit">${table.name}</span>
+                            <span class="kanit text-gray-600">ยอด: ฿${subtotal}</span>
+                        </button>`;
+            }).join('');
+
+            const ordersToBill = db.orders.filter(o => o.status === 'done' && (o.type === 'takeaway' || o.type === 'online'));
+            const orderList = ordersToBill.map(order => {
+                const subtotal = order.items.reduce((sum, item) => {
+                    const menuItem = db.menuItems.find(m => m.id === item.itemId);
+                    return sum + (item.qty * (menuItem?.price || 0));
+                }, 0);
+                let orderTitle = '';
+                if (order.type === 'takeaway') orderTitle = `ซื้อกลับบ้าน #${order.takeawayId}`;
+                else if (order.type === 'online') orderTitle = `ออนไลน์ #${order.takeawayId}`;
+                return `<button onclick="state.billingOrderId = ${order.id}; renderContent('billing');" class="w-full text-left p-4 border rounded-lg hover:bg-gray-50 flex justify-between items-center">
+                            <span class="font-bold kanit">${orderTitle}</span>
+                            <span class="kanit text-gray-600">ยอด: ฿${subtotal}</span>
+                        </button>`;
+            }).join('');
+
+            mainContent = `
+                <div class="bg-white p-6 rounded-lg shadow max-w-lg mx-auto">
+                    <h2 class="text-xl font-bold text-gray-700 kanit mb-4">โต๊ะที่รอชำระเงิน</h2>
+                    <div class="space-y-3">
+                        ${tablesToBill.length > 0 ? tableList : '<p class="text-gray-500 kanit text-center py-4">ไม่มีโต๊ะที่รอชำระเงิน</p>'}
+                    </div>
+                    <h2 class="text-xl font-bold text-gray-700 kanit mt-6 mb-4">ออเดอร์รอชำระเงิน (ซื้อกลับบ้าน/ออนไลน์)</h2>
+                    <div class="space-y-3">
+                        ${ordersToBill.length > 0 ? orderList : '<p class="text-gray-500 kanit text-center py-4">ไม่มีออเดอร์ที่รอชำระเงิน</p>'}
+                    </div>
+                </div>`;
+        }
+
+        const paidOrders = db.orders.filter(o => o.status === 'paid').sort((a,b) => b.timestamp - a.timestamp);
+        const transactionRows = paidOrders.map(order => {
+            let orderTitle = '';
+            if (order.type === 'takeaway') orderTitle = `ซื้อกลับบ้าน #${order.takeawayId}`;
+            else if (order.type === 'online') orderTitle = `ออนไลน์ #${order.takeawayId}`;
+            else {
+                const table = db.tables.find(t => t.id === order.tableId);
+                orderTitle = table ? table.name : 'โต๊ะที่ถูกลบ';
+            }
+            const paymentMethodText = order.paymentMethod === 'cash' ? 'เงินสด' : order.paymentMethod === 'qr' ? 'QR Code' : '-';
+            const paymentMethodColor = order.paymentMethod === 'cash' ? 'text-green-600' : 'text-blue-600';
+
+            return `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="p-4 kanit text-gray-600">${order.id}</td>
+                    <td class="p-4 kanit font-medium text-gray-800">${orderTitle}</td>
+                    <td class="p-4 kanit font-semibold ${paymentMethodColor}">${paymentMethodText}</td>
+                    <td class="p-4 kanit text-gray-600">฿${order.total.toFixed(2)}</td>
+                    <td class="p-4 kanit text-gray-600">${new Date(order.timestamp).toLocaleString('th-TH')}</td>
+                    <td class="p-4">
+                        <div class="flex items-center space-x-4">
+                            <button onclick="showReceiptModal(${order.id})" class="text-gray-600 hover:text-blue-600 flex items-center text-sm" title="ดู/พิมพ์ใบเสร็จ">
+                                <i data-lucide="printer" class="w-4 h-4"></i>
+                            </button>
+                             <button onclick="showEditPaidOrderModal(${order.id})" class="text-gray-600 hover:text-green-600 flex items-center text-sm" title="แก้ไขข้อมูลใบเสร็จ">
+                                <i data-lucide="file-pen-line" class="w-4 h-4"></i>
+                            </button>
+                             <button onclick="downloadReceiptAsPDF(${order.id})" class="text-gray-600 hover:text-purple-600 flex items-center text-sm" title="ดาวน์โหลด PDF">
+                                <i data-lucide="download" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        const transactionHistory = `
+            <div class="bg-white p-6 rounded-lg shadow mt-6">
+                <h2 class="text-xl font-bold text-gray-700 kanit mb-4">รายการชำระเงินทั้งหมด</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left min-w-max">
+                        <thead><tr class="border-b"><th class="p-4 kanit font-semibold">รหัสบิล</th><th class="p-4 kanit font-semibold">โต๊ะ/ประเภท</th><th class="p-4 kanit font-semibold">ประเภทชำระเงิน</th><th class="p-4 kanit font-semibold">ยอดชำระ</th><th class="p-4 kanit font-semibold">เวลา</th><th class="p-4 kanit font-semibold">จัดการ</th></tr></thead>
+                        <tbody>${transactionRows}</tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        return `<h1 class="text-3xl font-bold text-gray-800 kanit mb-6">ระบบชำระเงิน</h1>${mainContent}${transactionHistory}`;
+    }
+
+    function getReportsHTML() {
+        const reportData = generateReportData();
+        
+        const topItemsHTML = reportData.topSellingItems.map((item, index) => `
+            <li class="flex justify-between items-center kanit py-2 border-b">
+                <div class="flex items-center">
+                    <span class="font-bold w-6">${index + 1}.</span>
+                    <span>${item.name}</span>
+                </div>
+                <span class="font-semibold text-gray-600">${item.quantity} จาน</span>
+            </li>
+        `).join('');
+
+        return `
+            <h1 class="text-3xl font-bold text-gray-800 kanit mb-6">รายงานยอดขาย</h1>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <p class="text-sm text-gray-500 kanit">ยอดขายวันนี้</p>
+                    <p class="text-3xl font-bold text-gray-800">฿${reportData.salesToday.toLocaleString()}</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <p class="text-sm text-gray-500 kanit">ยอดขายเดือนนี้</p>
+                    <p class="text-3xl font-bold text-gray-800">฿${reportData.salesThisMonth.toLocaleString()}</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <p class="text-sm text-gray-500 kanit">จำนวนบิลวันนี้</p>
+                    <p class="text-3xl font-bold text-gray-800">${reportData.billsToday}</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <p class="text-sm text-gray-500 kanit">เฉลี่ยต่อบิล</p>
+                    <p class="text-3xl font-bold text-gray-800">฿${reportData.avgPerBill.toFixed(2)}</p>
+                </div>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow mb-6">
+                <h2 class="text-xl font-bold text-gray-700 kanit mb-4">แนวโน้มยอดขาย 7 วันล่าสุด</h2>
+                <canvas id="salesTrendChart"></canvas>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-xl font-bold text-gray-700 kanit mb-4">5 เมนูขายดีที่สุด</h2>
+                    <ul class="space-y-2">${topItemsHTML}</ul>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-xl font-bold text-gray-700 kanit mb-4">ยอดขายตามหมวดหมู่</h2>
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+             <div class="bg-white p-6 rounded-lg shadow mt-6">
+                <h2 class="text-xl font-bold text-gray-700 kanit mb-4">ช่วงเวลายอดนิยม (Peak Hours)</h2>
+                <canvas id="peakHoursChart"></canvas>
+            </div>
+        `;
+    }
+
+    function getUsersHTML() {
+        const rows = db.users.map(user => `
+            <tr class="border-b hover:bg-gray-50">
+                <td class="p-4 kanit font-medium text-gray-800">${user.name}</td>
+                <td class="p-4 kanit text-gray-600">${ROLES[user.role]?.name || 'N/A'}</td>
+                <td class="p-4 kanit text-gray-600">${user.username}</td>
+                <td class="p-4"><span class="px-3 py-1 text-sm rounded-full ${user.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} kanit">${user.active ? 'ใช้งาน' : 'ถูกระงับ'}</span></td>
+                <td class="p-4 flex space-x-2">
+                    ${user.role === 'admin' && user.username === 'toto' ? 
+                        `<button class="p-2 text-gray-400 cursor-not-allowed" title="ไม่สามารถแก้ไขแอดมินหลักได้"><i data-lucide="edit"></i></button>
+                         <button class="p-2 text-gray-400 cursor-not-allowed" title="ไม่สามารถลบแอดมินหลักได้"><i data-lucide="trash-2"></i></button>` :
+                        `<button onclick="showUserModal(${user.id})" class="p-2 text-blue-500 hover:bg-blue-100 rounded-full"><i data-lucide="edit"></i></button>
+                         <button onclick="deleteUser(${user.id})" class="p-2 text-red-500 hover:bg-red-100 rounded-full"><i data-lucide="trash-2"></i></button>`
+                    }
+                    <button onclick="resetPassword(${user.id})" class="p-2 text-green-500 hover:bg-green-100 rounded-full"><i data-lucide="key-round"></i></button>
+                </td>
+            </tr>
+        `).join('');
+
+        return `
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold text-gray-800 kanit">จัดการผู้ใช้งาน</h1>
+                <button onclick="showUserModal()" class="bg-orange-500 text-white font-bold kanit py-2 px-4 rounded-lg flex items-center hover:bg-orange-600"><i data-lucide="user-plus" class="w-5 h-5 mr-2"></i> เพิ่มผู้ใช้งานใหม่</button>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow overflow-x-auto">
+                <table class="w-full text-left min-w-max">
+                    <thead><tr class="border-b"><th class="p-4 kanit font-semibold">ชื่อ-นามสกุล</th><th class="p-4 kanit font-semibold">ตำแหน่ง</th><th class="p-4 kanit font-semibold">ชื่อผู้ใช้</th><th class="p-4 kanit font-semibold">สถานะ</th><th class="p-4 kanit font-semibold">จัดการ</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    }
+
+    function getRolesHTML() {
+        const allPerms = Object.keys(NAV_ITEMS);
+        const roleCards = Object.entries(ROLES).map(([roleKey, roleValue]) => `
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-bold text-gray-800 kanit border-b pb-2 mb-4">${roleValue.name}</h2>
+                <div class="space-y-2">
+                    ${allPerms.map(permKey => {
+                        const hasPerm = roleValue.perms.includes(permKey);
+                        const isDisabled = roleKey === 'admin';
+                        return `<label class="flex items-center ${isDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}">
+                                    <input type="checkbox" ${hasPerm ? 'checked' : ''} ${isDisabled ? 'disabled' : ''} onchange="handlePermissionChange('${roleKey}', '${permKey}')" class="mr-2 h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500">
+                                    <span class="kanit">${NAV_ITEMS[permKey].text}</span>
+                                </label>`;
+                    }).join('')}
+                </div>
+            </div>
+        `).join('');
+
+        return `
+            <h1 class="text-3xl font-bold text-gray-800 kanit mb-6">จัดการบทบาทและสิทธิ์</h1>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">${roleCards}</div>`;
+    }
+
+    function getStockHTML() {
+        const getStatus = (item) => {
+            if (item.remaining <= 0) {
+                return { text: 'หมด', classes: 'bg-red-100 text-red-800' };
+            }
+            if (item.remaining <= item.lowStock) {
+                return { text: 'ใกล้หมด', classes: 'bg-yellow-100 text-yellow-800' };
+            }
+            return { text: 'ปกติ', classes: 'bg-green-100 text-green-800' };
+        };
+
+        const rows = db.stock.map(item => {
+            const status = getStatus(item);
+            return `
+            <tr class="border-b hover:bg-gray-50">
+                <td class="p-4 kanit font-medium text-gray-800">${item.name}</td>
+                <td class="p-4 kanit text-gray-600">${item.remaining}</td>
+                <td class="p-4 kanit text-gray-600">${item.unit}</td>
+                <td class="p-4"><span class="px-3 py-1 text-sm rounded-full ${status.classes} kanit">${status.text}</span></td>
+                <td class="p-4 flex space-x-2">
+                    <button onclick="showStockModal(${item.id}, 'add')" class="p-2 text-green-500 hover:bg-green-100 rounded-full" title="เพิ่มสต็อก"><i data-lucide="plus"></i></button>
+                    <button onclick="showStockModal(${item.id}, 'use')" class="p-2 text-orange-500 hover:bg-orange-100 rounded-full" title="นำไปใช้"><i data-lucide="minus-circle"></i></button>
+                    <button onclick="showStockModal(${item.id}, 'adjust')" class="p-2 text-blue-500 hover:bg-blue-100 rounded-full" title="ปรับสต็อก"><i data-lucide="edit"></i></button>
+                    <button onclick="deleteStockItem(${item.id})" class="p-2 text-red-500 hover:bg-red-100 rounded-full" title="ลบ"><i data-lucide="trash-2"></i></button>
+                </td>
+            </tr>
+        `}).join('');
+
+        const historyRows = db.stockHistory.sort((a,b) => b.timestamp - a.timestamp).map(log => {
+            const stockItem = db.stock.find(s => s.id === log.stockId);
+            const user = db.users.find(u => u.id === log.userId);
+            const amountColor = log.amount > 0 ? 'text-green-600' : 'text-red-600';
+            const amountSign = log.amount > 0 ? '+' : '';
+
+            return `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="p-4 kanit text-sm text-gray-600">${new Date(log.timestamp).toLocaleString('th-TH')}</td>
+                    <td class="p-4 kanit font-medium text-gray-800">${stockItem?.name || 'N/A'}</td>
+                    <td class="p-4 kanit text-gray-600">${log.action}</td>
+                    <td class="p-4 kanit font-semibold ${amountColor}">${amountSign}${log.amount}</td>
+                    <td class="p-4 kanit text-gray-600">${user?.name || 'N/A'}</td>
+                </tr>
+            `;
+        }).join('');
+
+        return `
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold text-gray-800 kanit">สต๊อกวัตถุดิบ</h1>
+                <button onclick="showStockModal()" class="bg-orange-500 text-white font-bold kanit py-2 px-4 rounded-lg flex items-center hover:bg-orange-600"><i data-lucide="plus" class="w-5 h-5 mr-2"></i> เพิ่มวัตถุดิบ</button>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow">
+                <table class="w-full text-left">
+                    <thead><tr class="border-b"><th class="p-4 kanit font-semibold">วัตถุดิบ</th><th class="p-4 kanit font-semibold">จำนวนคงเหลือ</th><th class="p-4 kanit font-semibold">หน่วย</th><th class="p-4 kanit font-semibold">สถานะ</th><th class="p-4 kanit font-semibold">จัดการ</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow mt-6">
+                <h2 class="text-xl font-bold text-gray-700 kanit mb-4">ประวัติการทำสต๊อก</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left min-w-max">
+                        <thead><tr class="border-b"><th class="p-4 kanit font-semibold">วันที่/เวลา</th><th class="p-4 kanit font-semibold">วัตถุดิบ</th><th class="p-4 kanit font-semibold">การกระทำ</th><th class="p-4 kanit font-semibold">จำนวน</th><th class="p-4 kanit font-semibold">ผู้ดำเนินการ</th></tr></thead>
+                        <tbody>${historyRows}</tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    // ===================================================================================
+    // ACTIONS & EVENT HANDLERS
+    // ===================================================================================
+    function handleLogin(event) {
+        event.preventDefault();
+        const username = document.getElementById('username').value.toLowerCase();
+        const password = document.getElementById('password').value;
+        const user = db.users.find(u => u.username === username && u.password === password);
+
+        if (user && user.active) {
+            state.currentUserRole = user.role;
+            showPage('main-app');
+            renderAll();
+        } else if (user && !user.active) {
+            showToast('ชื่อผู้ใช้นี้ถูกระงับ', 'error');
+        } else {
+            showToast('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'error');
+        }
+    }
+
+    function logout() {
+        state.currentUserRole = null;
+        document.getElementById('username').value = '';
+        document.getElementById('password').value = '';
+        showPage('welcome-page');
+    }
+
+    // --- Menu Actions ---
+    function toggleMenuAvailability(id) {
+        const item = db.menuItems.find(i => i.id === id);
+        if (item) {
+            item.available = !item.available;
+            showToast(`เปลี่ยนสถานะ ${item.name} เป็น ${item.available ? 'มีจำหน่าย' : 'หมด'}`, 'success');
+            renderContent('menu');
+        }
+    }
+    function deleteMenuItem(id) {
+        showConfirmModal('ยืนยันการลบ', 'คุณแน่ใจหรือไม่ว่าต้องการลบเมนูนี้?', () => {
+            db.menuItems = db.menuItems.filter(i => i.id !== id);
+            showToast('ลบเมนูสำเร็จ', 'success');
+            renderContent('menu');
+        });
+    }
+    async function saveMenuItem(event, id) {
+        event.preventDefault();
+        const form = event.target;
+        const name = form.elements['menu-name'].value;
+        const category = form.elements['menu-category'].value;
+        const price = parseFloat(form.elements['menu-price'].value);
+        const file = form.elements['menu-img-upload'].files[0];
+
+        if (!name || !category || isNaN(price)) {
+            showToast('กรุณากรอกข้อมูลให้ครบถ้วน', 'error');
+            return;
+        }
+
+        let imgUrl = null;
+        if (file) {
+            imgUrl = await readFileAsDataURL(file);
+        }
+
+        if (id) { // Editing
+            const item = db.menuItems.find(i => i.id === id);
+            if (item) {
+                item.name = name;
+                item.category = category;
+                item.price = price;
+                if (imgUrl) {
+                    item.img = imgUrl;
+                }
+            }
+            showToast('บันทึกการแก้ไขสำเร็จ', 'success');
+        } else { // Adding
+            const newId = Date.now();
+            db.menuItems.push({ id: newId, name, category, price, img: imgUrl || 'https://placehold.co/100x70/cccccc/ffffff?text=ไม่มีรูป', available: true });
+            showToast('เพิ่มเมนูใหม่สำเร็จ', 'success');
+        }
+        closeModal();
+        renderContent('menu');
+    }
+
+    // --- Cart Actions ---
+    function addToCart(itemId) {
+        const existingItem = state.cart.find(item => item.itemId === itemId);
+        if (existingItem) {
+            existingItem.qty++;
+        } else {
+            state.cart.push({ itemId: itemId, qty: 1 });
+        }
+        renderContent('orders');
+    }
+
+    function updateCartQuantity(itemId, change) {
+        const cartItem = state.cart.find(item => item.itemId === itemId);
+        if (cartItem) {
+            cartItem.qty += change;
+            if (cartItem.qty <= 0) {
+                removeFromCart(itemId);
+            } else {
+                renderContent('orders');
+            }
+        }
+    }
+
+    function removeFromCart(itemId) {
+        state.cart = state.cart.filter(item => item.itemId !== itemId);
+        renderContent('orders');
+    }
+
+    function submitOrder() {
+        if (state.cart.length === 0) {
+            showToast('ตะกร้าสินค้าว่างเปล่า', 'error');
+            return;
+        }
+        
+        let destinationText = '';
+        if (state.orderType === 'table' && state.activeTableId) {
+            const table = db.tables.find(t => t.id === state.activeTableId);
+            destinationText = table.name;
+        } else if (state.orderType === 'takeaway') {
+            destinationText = 'ลูกค้าซื้อกลับบ้าน';
+        } else if (state.orderType === 'online') {
+            destinationText = 'ลูกค้าสั่งออนไลน์';
+        }
+
+        showConfirmModal('ยืนยันออเดอร์', `คุณต้องการส่งออเดอร์นี้สำหรับ "${destinationText}" หรือไม่?`, () => {
+            const newOrderId = Date.now();
+            const currentUser = db.users.find(u => u.role === state.currentUserRole);
+            
+            if (state.orderType === 'table' && state.activeTableId) {
+                const table = db.tables.find(t => t.id === state.activeTableId);
+                if (table) {
+                    table.order = [...state.cart];
+                    let orderInDb = db.orders.find(o => o.tableId === table.id && o.status !== 'paid');
+                    if (orderInDb) {
+                        orderInDb.items = [...state.cart];
+                        orderInDb.timestamp = new Date();
+                        orderInDb.userId = currentUser ? currentUser.id : 0;
+                    } else {
+                        db.orders.push({ id: newOrderId, tableId: table.id, items: [...state.cart], status: 'new', timestamp: new Date(), userId: currentUser ? currentUser.id : 0 });
+                    }
+                    showToast(`อัปเดตออเดอร์สำหรับ ${table.name} สำเร็จ!`, 'success');
+                    renderContent('tables');
+                    return;
+                }
+            } else if (state.orderType === 'takeaway' || state.orderType === 'online') {
+                const newStatus = 'done'; // Go directly to billing
+                db.orders.push({ id: newOrderId, type: state.orderType, takeawayId: Math.floor(Math.random() * 100) + 10, items: [...state.cart], status: newStatus, timestamp: new Date(), userId: currentUser ? currentUser.id : 0 });
+                showToast(`ส่งออเดอร์ ${destinationText} สำเร็จ!`, 'success');
+            }
+            
+            state.cart = [];
+            renderContent('orders');
+        });
+    }
+
+    // --- Table Actions ---
+    function addTable() {
+        showConfirmModal('ยืนยันการเพิ่มโต๊ะ', 'คุณต้องการเพิ่มโต๊ะใหม่หรือไม่?', () => {
+            const newTableId = db.tables.length > 0 ? Math.max(...db.tables.map(t => t.id)) + 1 : 1;
+            const newTable = {
+                id: newTableId,
+                name: `โต๊ะ ${newTableId}`,
+                status: 'vacant',
+                order: []
+            };
+            db.tables.push(newTable);
+            showToast('เพิ่มโต๊ะใหม่สำเร็จ', 'success');
+            renderContent('tables');
+        });
+    }
+
+    function deleteTable(tableId) {
+        const table = db.tables.find(t => t.id === tableId);
+        if (!table) return;
+
+        if (table.status !== 'vacant') {
+            showToast('ไม่สามารถลบโต๊ะที่กำลังใช้งานได้', 'error');
+            return;
+        }
+
+        showConfirmModal('ยืนยันการลบโต๊ะ', `คุณแน่ใจหรือไม่ว่าต้องการลบ ${table.name}?`, () => {
+            db.tables = db.tables.filter(t => t.id !== tableId);
+            showToast(`ลบ ${table.name} สำเร็จ`, 'success');
+            renderContent('tables');
+        });
+    }
+
+    function handleTableClick(tableId) {
+        const table = db.tables.find(t => t.id === tableId);
+        if (!table) return;
+        
+        if (table.status === 'vacant') {
+            showConfirmModal('เปิดโต๊ะใหม่', `คุณต้องการเปิดใช้งาน ${table.name} หรือไม่?`, () => {
+                table.status = 'occupied';
+                state.activeTableId = table.id;
+                state.orderType = 'table';
+                state.cart = [];
+                showToast(`${table.name} เปิดใช้งานแล้ว`, 'success');
+                renderContent('orders');
+            });
+        } else if (table.status === 'occupied') {
+            showTableActionModal(tableId);
+        } else if (table.status === 'billing') {
+            state.billingTableId = table.id;
+            renderContent('billing');
+        }
+    }
+    
+    function handleTakeawayClick() {
+        state.activeTableId = null;
+        state.orderType = 'takeaway';
+        state.cart = [];
+        renderContent('orders');
+    }
+
+    function handleOnlineClick() {
+        state.activeTableId = null;
+        state.orderType = 'online';
+        state.cart = [];
+        renderContent('orders');
+    }
+
+    function processPayment(id, method, totalAmount, type = 'table') {
+        const confirmAction = () => {
+            let order;
+            let itemsForStockDeduction = [];
+            
+            if (type === 'table') {
+                const table = db.tables.find(t => t.id === id);
+                if (!table) { showToast('ไม่พบโต๊ะ', 'error'); return; }
+                
+                itemsForStockDeduction = [...table.order];
+                order = db.orders.find(o => o.tableId === id && o.status !== 'paid');
+                
+                if (!order) { // If order doesn't exist for some reason, create it
+                    order = {
+                        id: Date.now(),
+                        tableId: id,
+                        userId: db.users.find(u => u.role === state.currentUserRole)?.id || 0,
+                    };
+                    db.orders.push(order);
+                }
+                table.status = 'vacant';
+                table.order = [];
+            } else { // type === 'order'
+                order = db.orders.find(o => o.id === id);
+                if (!order) { showToast('ไม่พบออเดอร์', 'error'); return; }
+                itemsForStockDeduction = [...order.items];
+            }
+
+            // Update the order details
+            order.status = 'paid';
+            order.total = totalAmount;
+            order.paymentMethod = method;
+            order.timestamp = new Date(); // Update timestamp to payment time
+            if (type === 'table') {
+                 order.items = [...itemsForStockDeduction];
+            }
+
+            // Deduct stock
+            itemsForStockDeduction.forEach(item => {
+                if (item.itemId === 1) { deductStock('เนื้อหมู', 0.15 * item.qty); deductStock('ใบกะเพรา', 0.01 * item.qty); }
+                if (item.itemId === 2) { /* Deduct for Tom Yum */ }
+            });
+
+            showToast('ชำระเงินสำเร็จ', 'success');
+            state.billingTableId = null;
+            state.billingOrderId = null;
+            renderContent('billing');
+        };
+
+        showConfirmModal('ยืนยันการชำระเงิน', `ยืนยันการชำระเงินยอด ฿${totalAmount.toFixed(2)}?`, confirmAction);
+    }
+
+    // --- Kitchen Actions ---
+    function updateOrderStatus(orderId, newStatus) {
+        const order = db.orders.find(o => o.id === orderId);
+        if (order) {
+            order.status = newStatus;
+            showToast(`อัปเดตสถานะออเดอร์ #${order.id} เป็น ${newStatus}`, 'success');
+            renderContent('kitchen');
+        }
+    }
+
+    function startKitchenTimers() {
+        const updateTimers = () => {
+            const timerElements = document.querySelectorAll('.kitchen-timer');
+            if (timerElements.length === 0) {
+                if(state.kitchenTimerInterval) clearInterval(state.kitchenTimerInterval);
+                state.kitchenTimerInterval = null;
+                return;
+            };
+            
+            timerElements.forEach(el => {
+                const timestamp = parseInt(el.dataset.timestamp, 10);
+                const now = new Date();
+                const minutesAgo = Math.round((now - new Date(timestamp)) / 60000);
+                
+                let timerColor = 'text-green-600';
+                if (minutesAgo > 10) timerColor = 'text-red-600';
+                else if (minutesAgo > 5) timerColor = 'text-yellow-600';
+
+                el.classList.remove('text-green-600', 'text-yellow-600', 'text-red-600');
+                el.classList.add(timerColor);
+                el.textContent = `${minutesAgo} นาที`;
+            });
+        };
+
+        updateTimers(); // Initial call
+        if (!state.kitchenTimerInterval) {
+            state.kitchenTimerInterval = setInterval(updateTimers, 60000);
+        }
+    }
+
+    // --- User Actions ---
+    function deleteUser(id) {
+        showConfirmModal('ยืนยันการลบ', 'คุณแน่ใจหรือไม่ว่าต้องการลบผู้ใช้งานนี้?', () => {
+            db.users = db.users.filter(u => u.id !== id);
+            showToast('ลบผู้ใช้งานสำเร็จ', 'success');
+            renderContent('users');
+        });
+    }
+    function resetPassword(id) {
+        const user = db.users.find(u => u.id === id);
+        showConfirmModal('รีเซ็ตรหัสผ่าน', `คุณต้องการรีเซ็ตรหัสผ่านสำหรับ ${user.name} หรือไม่?`, () => {
+            showToast(`ส่งลิงก์รีเซ็ตรหัสผ่านไปที่อีเมลของ ${user.name} แล้ว (จำลอง)`, 'success');
+        });
+    }
+    function saveUser(event, id) {
+        event.preventDefault();
+        const form = event.target;
+        const name = form.elements['user-name'].value;
+        const username = form.elements['user-username'].value.toLowerCase();
+        const role = form.elements['user-role'].value;
+        const active = form.elements['user-active'].checked;
+        const password = form.elements['user-password']?.value;
+
+        if (!name || !username || !role) {
+            showToast('กรุณากรอกข้อมูลให้ครบถ้วน', 'error');
+            return;
+        }
+        
+        const isDuplicate = db.users.some(user => user.username === username && user.id !== id);
+        if (isDuplicate) {
+            showToast('ชื่อผู้ใช้นี้มีอยู่แล้ว', 'error');
+            return;
+        }
+
+        if (id) { // Editing
+            const user = db.users.find(u => u.id === id);
+            if (user) {
+                user.name = name;
+                user.username = username;
+                user.role = role;
+                user.active = active;
+            }
+            showToast('บันทึกการแก้ไขผู้ใช้สำเร็จ', 'success');
+        } else { // Adding
+            if (!password) {
+                showToast('กรุณากรอกรหัสผ่านสำหรับผู้ใช้ใหม่', 'error');
+                return;
+            }
+            const newId = Date.now();
+            db.users.push({ id: newId, name, username, role, active, password }); // In a real app, hash the password
+            showToast('เพิ่มผู้ใช้ใหม่สำเร็จ', 'success');
+        }
+        closeModal();
+        renderContent('users');
+    }
+
+
+    // --- Stock Actions ---
+    function logStockHistory(stockId, action, amount) {
+        const currentUser = db.users.find(u => u.role === state.currentUserRole);
+        db.stockHistory.push({
+            id: Date.now(),
+            stockId: stockId,
+            userId: currentUser ? currentUser.id : 0, // 0 for system
+            action: action,
+            amount: amount,
+            timestamp: new Date()
+        });
+    }
+
+    function deductStock(stockName, amount) {
+        const stockItem = db.stock.find(s => s.name === stockName);
+        if (stockItem) {
+            stockItem.remaining -= amount;
+            logStockHistory(stockItem.id, 'เบิกใช้ (ออเดอร์)', -amount);
+        }
+    }
+
+    function deleteStockItem(id) {
+        showConfirmModal('ยืนยันการลบ', 'คุณแน่ใจหรือไม่ว่าต้องการลบวัตถุดิบนี้?', () => {
+            db.stock = db.stock.filter(i => i.id !== id);
+            showToast('ลบวัตถุดิบสำเร็จ', 'success');
+            renderContent('stock');
+        });
+    }
+
+    function saveStockItem(event) {
+        event.preventDefault();
+        const form = event.target;
+        const name = form.elements['stock-name'].value;
+        const remaining = parseFloat(form.elements['stock-remaining'].value);
+        const unit = form.elements['stock-unit'].value;
+        const lowStock = parseFloat(form.elements['stock-low'].value);
+        
+        if (!name || isNaN(remaining) || !unit || isNaN(lowStock)) {
+            showToast('กรุณากรอกข้อมูลให้ครบถ้วน', 'error');
+            return;
+        }
+
+        const newId = Date.now();
+        db.stock.push({ id: newId, name, remaining, unit, lowStock });
+        logStockHistory(newId, 'สร้างใหม่', remaining);
+        showToast('เพิ่มวัตถุดิบใหม่สำเร็จ', 'success');
+        closeModal();
+        renderContent('stock');
+    }
+
+    function adjustStockItem(event, id, mode) {
+        event.preventDefault();
+        const form = event.target;
+        const amount = parseFloat(form.elements['stock-amount'].value);
+
+        if (isNaN(amount) || amount <= 0) {
+            showToast('กรุณากรอกจำนวนให้ถูกต้อง', 'error');
+            return;
+        }
+
+        const item = db.stock.find(i => i.id === id);
+        if (item) {
+            if (mode === 'add') {
+                item.remaining += amount;
+                logStockHistory(id, 'รับเข้า', amount);
+                showToast('เพิ่มสต็อกสำเร็จ', 'success');
+            } else if (mode === 'use') {
+                if (amount > item.remaining) {
+                    showToast('วัตถุดิบไม่เพียงพอ', 'error');
+                    return;
+                }
+                item.remaining -= amount;
+                logStockHistory(id, 'นำไปใช้', -amount);
+                showToast('บันทึกการใช้วัตถุดิบสำเร็จ', 'success');
+            } else { // adjust
+                const diff = amount - item.remaining;
+                item.remaining = amount;
+                logStockHistory(id, 'ปรับสต็อก', diff);
+                showToast('ปรับสต็อกสำเร็จ', 'success');
+            }
+        }
+        closeModal();
+        renderContent('stock');
+    }
+
+    // --- Role Actions ---
+    function handlePermissionChange(roleKey, permKey) {
+        const role = ROLES[roleKey];
+        if (!role) return;
+
+        const permIndex = role.perms.indexOf(permKey);
+        if (permIndex > -1) {
+            role.perms.splice(permIndex, 1);
+        } else {
+            role.perms.push(permKey);
+        }
+        showToast(`อัปเดตสิทธิ์สำหรับ ${role.name} สำเร็จ`, 'success');
+        renderContent('roles');
+    }
+
+    // ===================================================================================
+    // MODALS & UI HELPERS
+    // ===================================================================================
+    function showPage(pageId) {
+        ['welcome-page', 'login-page', 'main-app'].forEach(id => document.getElementById(id).classList.add('hidden'));
+        document.getElementById(pageId).classList.remove('hidden');
+    }
+
+    function showToast(message, type = 'success') {
+        const toastContainer = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        toastContainer.appendChild(toast);
+        
+        setTimeout(() => toast.classList.add('show'), 10);
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    function closeModal() {
+        const modalContainer = document.getElementById('modal-container');
+        modalContainer.innerHTML = '';
+    }
+
+    function showConfirmModal(title, message, onConfirm) {
+        const modalContainer = document.getElementById('modal-container');
+        const modalHTML = `
+            <div id="confirm-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop">
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
+                    <h2 class="text-xl font-bold kanit text-gray-800 mb-4">${title}</h2>
+                    <p class="text-gray-600 kanit mb-6">${message}</p>
+                    <div class="flex justify-end">
+                        <button onclick="closeModal()" class="kanit bg-gray-200 text-gray-800 py-2 px-4 rounded-lg mr-2 hover:bg-gray-300">ยกเลิก</button>
+                        <button id="modal-confirm" class="kanit bg-orange-500 text-white py-2 px-4 rounded-lg hover:bg-orange-600">ยืนยัน</button>
+                    </div>
+                </div>
+            </div>`;
+        modalContainer.innerHTML = modalHTML;
+        document.getElementById('modal-confirm').onclick = () => {
+            onConfirm();
+            closeModal();
+        };
+    }
+
+    function showCashPaymentModal(id, totalAmount, type = 'table') {
+        const modalContainer = document.getElementById('modal-container');
+        const modalHTML = `
+            <div id="cash-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop">
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
+                    <h2 class="text-xl font-bold kanit text-gray-800 mb-4">ชำระด้วยเงินสด</h2>
+                    <p class="kanit mb-2">ยอดชำระทั้งหมด: <span class="font-bold">฿${totalAmount}</span></p>
+                    <div class="mb-4">
+                        <label for="cash-received" class="block text-gray-700 kanit font-medium mb-2">จำนวนเงินที่รับมา</label>
+                        <input type="number" id="cash-received" class="w-full px-4 py-2 border rounded-lg text-lg text-right" oninput="calculateChange(${totalAmount})">
+                    </div>
+                    <p class="kanit mb-6">เงินทอน: <span id="change-amount" class="font-bold text-2xl text-green-600">฿0.00</span></p>
+                    <div class="flex justify-end">
+                        <button onclick="closeModal()" class="kanit bg-gray-200 text-gray-800 py-2 px-4 rounded-lg mr-2 hover:bg-gray-300">ยกเลิก</button>
+                        <button id="confirm-payment-btn" onclick="this.disabled=true; this.innerHTML = 'กำลังบันทึก...'; processPayment(${id}, 'cash', ${totalAmount}, '${type}')" class="kanit bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 disabled:opacity-75" disabled>ยืนยันการชำระเงิน</button>
+                    </div>
+                </div>
+            </div>`;
+        modalContainer.innerHTML = modalHTML;
+        document.getElementById('cash-received').focus();
+    }
+
+    function calculateChange(totalAmount) {
+        const receivedAmount = parseFloat(document.getElementById('cash-received').value) || 0;
+        const change = receivedAmount - totalAmount;
+        const changeAmountEl = document.getElementById('change-amount');
+        const confirmBtn = document.getElementById('confirm-payment-btn');
+
+        if (change >= 0) {
+            changeAmountEl.textContent = `฿${change.toFixed(2)}`;
+            changeAmountEl.classList.remove('text-red-600');
+            changeAmountEl.classList.add('text-green-600');
+            confirmBtn.disabled = false;
+        } else {
+            changeAmountEl.textContent = `ขาดอีก ฿${Math.abs(change).toFixed(2)}`;
+            changeAmountEl.classList.remove('text-green-600');
+            changeAmountEl.classList.add('text-red-600');
+            confirmBtn.disabled = true;
+        }
+    }
+
+    function showQRCodeModal(id, totalAmount, type = 'table') {
+        const modalContainer = document.getElementById('modal-container');
+        const modalHTML = `
+            <div id="qr-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop">
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 text-center">
+                    <h2 class="text-xl font-bold kanit text-gray-800 mb-2">ชำระด้วย QR Code</h2>
+                    <p class="kanit mb-4">ยอดชำระ: <span class="font-bold text-2xl">฿${totalAmount.toFixed(2)}</span></p>
+                    <img id="qr-code-img" src="${state.qrCodeImage}" class="w-64 h-64 mx-auto my-4 border rounded-lg">
+                    <input type="file" id="qr-upload-input" class="hidden" accept="image/*" onchange="handleQRCodeUpload(event, ${id}, ${totalAmount}, '${type}')">
+                    <label for="qr-upload-input" class="kanit text-sm text-blue-600 hover:underline cursor-pointer">เปลี่ยนรูป QR Code</label>
+                    <div class="flex justify-end mt-6">
+                        <button onclick="closeModal()" class="kanit bg-gray-200 text-gray-800 py-2 px-4 rounded-lg mr-2 hover:bg-gray-300">ยกเลิก</button>
+                        <button onclick="this.disabled=true; this.innerHTML = 'กำลังยืนยัน...'; processPayment(${id}, 'qr', ${totalAmount}, '${type}')" class="kanit bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 disabled:opacity-75">ยืนยันการชำระเงิน</button>
+                    </div>
+                </div>
+            </div>`;
+        modalContainer.innerHTML = modalHTML;
+    }
+
+    async function handleQRCodeUpload(event, id, totalAmount, type) {
+        const file = event.target.files[0];
+        if (file) {
+            state.qrCodeImage = await readFileAsDataURL(file);
+            showQRCodeModal(id, totalAmount, type); // Re-render the modal with the new image
+        }
+    }
+
+    function showReceiptModal(orderId) {
+        const order = db.orders.find(o => o.id === orderId);
+        if (!order) return;
+
+        let orderTitle = '';
+        if (order.type === 'takeaway') orderTitle = `ซื้อกลับบ้าน #${order.takeawayId}`;
+        else if (order.type === 'online') orderTitle = `ออนไลน์ #${order.takeawayId}`;
+        else {
+            const table = db.tables.find(t => t.id === order.tableId);
+            orderTitle = table ? table.name : 'โต๊ะที่ถูกลบ';
+        }
+
+        const receiptItems = order.items.map(item => {
+            const menuItem = db.menuItems.find(m => m.id === item.itemId);
+            const itemTotal = (menuItem?.price || 0) * item.qty;
+            return `
+                <div class="flex justify-between text-sm">
+                    <p>${item.qty} x ${menuItem.name}</p>
+                    <p>฿${itemTotal.toFixed(2)}</p>
+                </div>
+            `;
+        }).join('');
+
+        const corporateDetailsHTML = `
+        <div id="corporate-print-details" class="text-sm my-4 border-t border-b py-2 ${ (order.customerName || order.customerAddress || order.customerTaxId) ? 'print-block' : 'hidden' }">
+            <p><strong>เลขประจำตัวผู้เสียภาษี:</strong> ${order.customerTaxId || ''}</p>
+            <p><strong>ลูกค้า:</strong> ${order.customerName || ''}</p>
+            <p><strong>ที่อยู่:</strong> ${order.customerAddress || ''}</p>
+        </div>
+        `;
+
+        const modalContainer = document.getElementById('modal-container');
+        const modalHTML = `
+            <div id="receipt-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop">
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-sm">
+                    <div id="receipt-content" class="p-6 text-gray-800">
+                        <div class="text-center mb-6">
+                            <h2 class="text-2xl font-bold kanit">โตโต้อาหารอิ่มจัง!</h2>
+                            <p class="text-sm">ใบเสร็จรับเงิน</p>
+                        </div>
+                        <div class="text-sm mb-4">
+                            <p><strong>รหัสบิล:</strong> ${order.id}</p>
+                            <p><strong>วันที่:</strong> ${new Date(order.timestamp).toLocaleString('th-TH')}</p>
+                            <p><strong>สำหรับ:</strong> ${orderTitle}</p>
+                        </div>
+                        
+                        ${corporateDetailsHTML}
+
+                        <div class="border-t border-b py-2 my-2 space-y-1">${receiptItems}</div>
+                        <div class="flex justify-between font-bold text-lg mt-4">
+                            <p>ยอดสุทธิ</p>
+                            <p>฿${order.total.toFixed(2)}</p>
+                        </div>
+                        <p class="text-center text-sm mt-6 kanit">ขอบคุณที่ใช้บริการ</p>
+                    </div>
+                    <div class="p-4 bg-gray-100 flex justify-end space-x-2 print-hidden">
+                        <button onclick="closeModal()" class="kanit bg-gray-200 text-gray-800 py-2 px-4 rounded-lg mr-2 hover:bg-gray-300">ปิด</button>
+                        <button onclick="printReceipt()" class="kanit bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 flex items-center"><i data-lucide="printer" class="w-4 h-4 mr-2"></i> พิมพ์</button>
+                    </div>
+                </div>
+            </div>`;
+        modalContainer.innerHTML = modalHTML;
+        lucide.createIcons();
+    }
+    
+    function showEditPaidOrderModal(orderId) {
+        const order = db.orders.find(o => o.id === orderId);
+        if (!order) return;
+
+        const modalContainer = document.getElementById('modal-container');
+        modalContainer.innerHTML = `
+            <div id="edit-order-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop">
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+                    <form onsubmit="savePaidOrderDetails(event, ${order.id})">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-bold kanit text-gray-800">แก้ไขข้อมูลใบเสร็จ #${order.id}</h2>
+                            <button type="button" onclick="closeModal()" class="text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
+                        </div>
+                        <div class="space-y-4">
+                            <p class="text-sm kanit">กรอกข้อมูลสำหรับลูกค้าบริษัท</p>
+                            <div>
+                                <label class="block text-gray-700 kanit font-medium mb-2">เลขประจำตัวผู้เสียภาษี:</label>
+                                <input type="text" name="company-tax-id" class="w-full border rounded-lg p-2" value="${order.customerTaxId || ''}">
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 kanit font-medium mb-2">ชื่อบริษัท:</label>
+                                <input type="text" name="company-name" class="w-full border rounded-lg p-2" value="${order.customerName || ''}">
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 kanit font-medium mb-2">ที่อยู่:</label>
+                                <textarea name="company-address" class="w-full border rounded-lg p-2 h-20">${order.customerAddress || ''}</textarea>
+                            </div>
+                        </div>
+                        <div class="flex justify-end mt-6">
+                            <button type="button" onclick="closeModal()" class="kanit bg-gray-200 text-gray-800 py-2 px-4 rounded-lg mr-2 hover:bg-gray-300">ยกเลิก</button>
+                            <button type="submit" class="kanit bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600">บันทึกข้อมูล</button>
+                        </div>
+                    </form>
+                </div>
+            </div>`;
+    }
+
+    function savePaidOrderDetails(event, orderId) {
+        event.preventDefault();
+        const form = event.target;
+        const order = db.orders.find(o => o.id === orderId);
+        if (order) {
+            order.customerName = form.elements['company-name'].value;
+            order.customerAddress = form.elements['company-address'].value;
+            order.customerTaxId = form.elements['company-tax-id'].value;
+            showToast('บันทึกข้อมูลใบเสร็จสำเร็จ', 'success');
+            closeModal();
+            renderContent('billing');
+        } else {
+            showToast('ไม่พบออเดอร์', 'error');
+        }
+    }
+
+    function printReceipt() {
+        setTimeout(() => window.print(), 100);
+    }
+    
+    async function downloadReceiptAsPDF(orderId) {
+        const order = db.orders.find(o => o.id === orderId);
+        if (!order) return;
+
+        showToast('กำลังเตรียมไฟล์ PDF...', 'success');
+
+        const tempContainer = document.createElement('div');
+        tempContainer.style.position = 'absolute';
+        tempContainer.style.left = '-9999px';
+        tempContainer.style.width = '384px'; // Tailwind's max-w-sm
+        tempContainer.style.backgroundColor = 'white';
+        
+        let orderTitle = '';
+        if (order.type === 'takeaway') orderTitle = `ซื้อกลับบ้าน #${order.takeawayId}`;
+        else if (order.type === 'online') orderTitle = `ออนไลน์ #${order.takeawayId}`;
+        else {
+            const table = db.tables.find(t => t.id === order.tableId);
+            orderTitle = table ? table.name : 'โต๊ะที่ถูกลบ';
+        }
+
+        const receiptItems = order.items.map(item => {
+            const menuItem = db.menuItems.find(m => m.id === item.itemId);
+            const itemTotal = (menuItem?.price || 0) * item.qty;
+            return `
+                <div class="flex justify-between text-sm">
+                    <p>${item.qty} x ${menuItem.name}</p>
+                    <p>฿${itemTotal.toFixed(2)}</p>
+                </div>
+            `;
+        }).join('');
+
+        const corporateDetailsHTML = (order.customerName || order.customerAddress || order.customerTaxId) ? `
+        <div class="text-sm my-4 border-t border-b py-2">
+            <p><strong>เลขประจำตัวผู้เสียภาษี:</strong> ${order.customerTaxId || ''}</p>
+            <p><strong>ลูกค้า:</strong> ${order.customerName || ''}</p>
+            <p><strong>ที่อยู่:</strong> ${order.customerAddress || ''}</p>
+        </div>
+        ` : '';
+
+        const receiptHTML = `
+            <div id="pdf-receipt-content" class="p-6 text-gray-800">
+                <div class="text-center mb-6">
+                    <h2 class="text-2xl font-bold kanit">โตโต้อาหารอิ่มจัง!</h2>
+                    <p class="text-sm">ใบเสร็จรับเงิน</p>
+                </div>
+                <div class="text-sm mb-4">
+                    <p><strong>รหัสบิล:</strong> ${order.id}</p>
+                    <p><strong>วันที่:</strong> ${new Date(order.timestamp).toLocaleString('th-TH')}</p>
+                    <p><strong>สำหรับ:</strong> ${orderTitle}</p>
+                </div>
+                ${corporateDetailsHTML}
+                <div class="border-t border-b py-2 my-2 space-y-1">${receiptItems}</div>
+                <div class="flex justify-between font-bold text-lg mt-4">
+                    <p>ยอดสุทธิ</p>
+                    <p>฿${order.total.toFixed(2)}</p>
+                </div>
+                <p class="text-center text-sm mt-6 kanit">ขอบคุณที่ใช้บริการ</p>
+            </div>`;
+        
+        tempContainer.innerHTML = receiptHTML;
+        document.body.appendChild(tempContainer);
+        
+        const { jsPDF } = window.jspdf;
+        await html2canvas(tempContainer.querySelector('#pdf-receipt-content'), { scale: 2 });
+        const canvas = await html2canvas(tempContainer.querySelector('#pdf-receipt-content'));
+        const imgData = canvas.toDataURL('image/png');
+        
+        const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'px',
+            format: [canvas.width, canvas.height]
+        });
+
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save(`receipt-${order.id}.pdf`);
+
+        document.body.removeChild(tempContainer);
+    }
+
+
+    function showTableActionModal(tableId) {
+        const table = db.tables.find(t => t.id === tableId);
+        if (!table) return;
+
+        const orderDetails = table.order.map(item => {
+            const menuItem = db.menuItems.find(m => m.id === item.itemId);
+            return `<div class="flex justify-between text-sm"><p>${item.qty}x ${menuItem.name}</p><span>฿${item.qty * menuItem.price}</span></div>`;
+        }).join('');
+        
+        const subtotal = table.order.reduce((sum, item) => sum + (item.qty * db.menuItems.find(m => m.id === item.itemId).price), 0);
+
+        const modalContainer = document.getElementById('modal-container');
+        const modalHTML = `
+            <div id="table-action-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop">
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-bold kanit text-gray-800">จัดการ${table.name}</h2>
+                        <button type="button" onclick="closeModal()" class="text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
+                    </div>
+                    <div class="mb-4 border-b pb-4">
+                        <h3 class="font-semibold kanit mb-2">รายการปัจจุบัน</h3>
+                        <div class="space-y-1 max-h-40 overflow-y-auto">
+                            ${orderDetails || '<p class="text-gray-400 text-sm">ยังไม่มีรายการ</p>'}
+                        </div>
+                        <div class="flex justify-between font-bold mt-2 pt-2 border-t">
+                            <p>ยอดรวม</p>
+                            <p>฿${subtotal}</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <button onclick="addItemsToTable(${table.id})" class="w-full bg-blue-500 text-white font-bold kanit py-3 rounded-lg hover:bg-blue-600 flex items-center justify-center"><i data-lucide="plus" class="w-5 h-5 mr-2"></i> เพิ่มรายการ</button>
+                        <button onclick="requestBillForTable(${table.id})" class="w-full bg-green-500 text-white font-bold kanit py-3 rounded-lg hover:bg-green-600 flex items-center justify-center"><i data-lucide="receipt" class="w-5 h-5 mr-2"></i> เรียกเก็บเงิน</button>
+                    </div>
+                </div>
+            </div>`;
+        modalContainer.innerHTML = modalHTML;
+        lucide.createIcons();
+    }
+
+    function addItemsToTable(tableId) {
+        const table = db.tables.find(t => t.id === tableId);
+        if(table) {
+            state.activeTableId = table.id;
+            state.orderType = 'table';
+            state.cart = [...table.order];
+            closeModal();
+            renderContent('orders');
+        }
+    }
+
+    function requestBillForTable(tableId) {
+        const table = db.tables.find(t => t.id === tableId);
+        if(table) {
+            table.status = 'billing';
+            showToast(`${table.name} กำลังรอชำระเงิน`, 'success');
+            closeModal();
+            renderContent('tables');
+        }
+    }
+    
+    function showMenuModal(id = null) {
+        const isEditing = id !== null;
+        const item = isEditing ? db.menuItems.find(i => i.id === id) : {};
+        const title = isEditing ? 'แก้ไขเมนู' : 'เพิ่มเมนูใหม่';
+        
+        const modalContainer = document.getElementById('modal-container');
+        const modalHTML = `
+            <div id="menu-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop">
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+                    <form onsubmit="saveMenuItem(event, ${id})">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-bold kanit text-gray-800">${title}</h2>
+                            <button type="button" onclick="closeModal()" class="text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
+                        </div>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-gray-700 kanit font-medium mb-2">ชื่อเมนู</label>
+                                <input type="text" name="menu-name" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400" value="${item.name || ''}" required>
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 kanit font-medium mb-2">หมวดหมู่</label>
+                                <input type="text" name="menu-category" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400" value="${item.category || ''}" required>
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 kanit font-medium mb-2">ราคา</label>
+                                <input type="number" name="menu-price" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400" value="${item.price || ''}" required>
+                            </div>
+                             <div>
+                                <label class="block text-gray-700 kanit font-medium mb-2">รูปภาพ</label>
+                                <img id="menu-img-preview" src="${item.img || 'https://placehold.co/200x100/f0f0f0/cccccc?text=เลือกรูปภาพ'}" class="w-full h-32 object-cover rounded-lg mb-2 bg-gray-200">
+                                <input type="file" name="menu-img-upload" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100" accept="image/*">
+                            </div>
+                        </div>
+                        <div class="flex justify-end mt-6">
+                            <button type="button" onclick="closeModal()" class="kanit bg-gray-200 text-gray-800 py-2 px-4 rounded-lg mr-2 hover:bg-gray-300">ยกเลิก</button>
+                            <button type="submit" class="kanit bg-orange-500 text-white py-2 px-4 rounded-lg hover:bg-orange-600">บันทึก</button>
+                        </div>
+                    </form>
+                </div>
+            </div>`;
+        modalContainer.innerHTML = modalHTML;
+
+        const fileInput = document.querySelector('input[name="menu-img-upload"]');
+        const previewImg = document.getElementById('menu-img-preview');
+        fileInput.onchange = evt => {
+            const [file] = fileInput.files;
+            if (file) {
+                previewImg.src = URL.createObjectURL(file);
+            }
+        }
+    }
+
+    function readFileAsDataURL(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function showUserModal(id = null) {
+        const isEditing = id !== null;
+        const user = isEditing ? db.users.find(u => u.id === id) : {};
+        const title = isEditing ? 'แก้ไขผู้ใช้งาน' : 'เพิ่มผู้ใช้งานใหม่';
+
+        const roleOptions = Object.keys(ROLES).map(roleKey => 
+            `<option value="${roleKey}" ${user.role === roleKey ? 'selected' : ''}>${ROLES[roleKey].name}</option>`
+        ).join('');
+
+        const modalContainer = document.getElementById('modal-container');
+        const modalHTML = `
+            <div id="user-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop">
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+                    <form onsubmit="saveUser(event, ${id})">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-bold kanit text-gray-800">${title}</h2>
+                            <button type="button" onclick="closeModal()" class="text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
+                        </div>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-gray-700 kanit font-medium mb-2">ชื่อ-นามสกุล</label>
+                                <input type="text" name="user-name" class="w-full px-4 py-2 border rounded-lg" value="${user.name || ''}" required>
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 kanit font-medium mb-2">ชื่อผู้ใช้ (Username)</label>
+                                <input type="text" name="user-username" class="w-full px-4 py-2 border rounded-lg" value="${user.username || ''}" required>
+                            </div>
+                            ${!isEditing ? `
+                            <div>
+                                <label class="block text-gray-700 kanit font-medium mb-2">รหัสผ่าน</label>
+                                <input type="password" name="user-password" class="w-full px-4 py-2 border rounded-lg" required>
+                            </div>` : ''}
+                            <div>
+                                <label class="block text-gray-700 kanit font-medium mb-2">ตำแหน่ง</label>
+                                <select name="user-role" class="w-full px-4 py-2 border rounded-lg">${roleOptions}</select>
+                            </div>
+                            <div>
+                                <label class="flex items-center">
+                                    <input type="checkbox" name="user-active" class="h-4 w-4 text-orange-600 border-gray-300 rounded" ${user.active || isEditing === false ? 'checked' : ''}>
+                                    <span class="ml-2 kanit text-gray-700">ใช้งาน</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="flex justify-end mt-6">
+                            <button type="button" onclick="closeModal()" class="kanit bg-gray-200 text-gray-800 py-2 px-4 rounded-lg mr-2">ยกเลิก</button>
+                            <button type="submit" class="kanit bg-orange-500 text-white py-2 px-4 rounded-lg">บันทึก</button>
+                        </div>
+                    </form>
+                </div>
+            </div>`;
+        modalContainer.innerHTML = modalHTML;
+    }
+
+    function showStockModal(id = null, mode = 'new') {
+        const isNew = mode === 'new';
+        const isAdd = mode === 'add';
+        const isAdjust = mode === 'adjust';
+        const isUse = mode === 'use';
+        
+        const item = isNew ? {} : db.stock.find(i => i.id === id);
+        let title = '';
+        let formContent = '';
+
+        if (isNew) {
+            title = 'เพิ่มวัตถุดิบใหม่';
+            formContent = `
+                <form onsubmit="saveStockItem(event)">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-gray-700 kanit font-medium mb-2">ชื่อวัตถุดิบ</label>
+                            <input type="text" name="stock-name" class="w-full px-4 py-2 border rounded-lg" required>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-gray-700 kanit font-medium mb-2">จำนวนเริ่มต้น</label>
+                                <input type="number" name="stock-remaining" class="w-full px-4 py-2 border rounded-lg" step="0.01" required>
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 kanit font-medium mb-2">หน่วย</label>
+                                <input type="text" name="stock-unit" class="w-full px-4 py-2 border rounded-lg" placeholder="เช่น กก., ชิ้น, ขวด" required>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 kanit font-medium mb-2">แจ้งเตือนเมื่อเหลือน้อยกว่า</label>
+                            <input type="number" name="stock-low" class="w-full px-4 py-2 border rounded-lg" step="0.01" required>
+                        </div>
+                    </div>
+                    <div class="flex justify-end mt-6">
+                        <button type="button" onclick="closeModal()" class="kanit bg-gray-200 text-gray-800 py-2 px-4 rounded-lg mr-2">ยกเลิก</button>
+                        <button type="submit" class="kanit bg-orange-500 text-white py-2 px-4 rounded-lg">บันทึก</button>
+                    </div>
+                </form>
+            `;
+        } else {
+            if(isAdd) title = `เพิ่มสต็อก: ${item.name}`;
+            if(isAdjust) title = `ปรับสต็อก: ${item.name}`;
+            if(isUse) title = `นำวัตถุดิบไปใช้: ${item.name}`;
+
+            let labelText = '';
+            if(isAdd) labelText = 'จำนวนที่เพิ่ม';
+            if(isUse) labelText = 'จำนวนที่นำไปใช้';
+            if(isAdjust) labelText = 'จำนวนใหม่';
+
+            formContent = `
+                <form onsubmit="adjustStockItem(event, ${id}, '${mode}')">
+                    <p class="kanit mb-2">จำนวนปัจจุบัน: <span class="font-bold">${item.remaining} ${item.unit}</span></p>
+                    <div>
+                        <label class="block text-gray-700 kanit font-medium mb-2">${labelText}</label>
+                        <input type="number" name="stock-amount" class="w-full px-4 py-2 border rounded-lg" step="0.01" required autofocus>
+                    </div>
+                    <div class="flex justify-end mt-6">
+                        <button type="button" onclick="closeModal()" class="kanit bg-gray-200 text-gray-800 py-2 px-4 rounded-lg mr-2">ยกเลิก</button>
+                        <button type="submit" class="kanit bg-orange-500 text-white py-2 px-4 rounded-lg">บันทึก</button>
+                    </div>
+                </form>
+            `;
+        }
+
+        const modalContainer = document.getElementById('modal-container');
+        modalContainer.innerHTML = `
+            <div id="stock-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop">
+                <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-bold kanit text-gray-800">${title}</h2>
+                        <button type="button" onclick="closeModal()" class="text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
+                    </div>
+                    ${formContent}
+                </div>
+            </div>`;
+    }
+
+    // --- Report Functions ---
+    function generateReportData() {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        const paidOrders = db.orders.filter(o => o.status === 'paid');
+
+        const salesToday = paidOrders
+            .filter(o => new Date(o.timestamp) >= today)
+            .reduce((sum, o) => sum + o.total, 0);
+
+        const salesThisMonth = paidOrders
+            .filter(o => new Date(o.timestamp) >= startOfMonth)
+            .reduce((sum, o) => sum + o.total, 0);
+
+        const billsToday = paidOrders.filter(o => new Date(o.timestamp) >= today).length;
+        const avgPerBill = billsToday > 0 ? salesToday / billsToday : 0;
+
+        const salesByDay = Array(7).fill(0);
+        const dayLabels = [];
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            dayLabels.push(date.toLocaleDateString('th-TH', { weekday: 'short' }));
+            const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1);
+            
+            salesByDay[6 - i] = paidOrders
+                .filter(o => {
+                    const orderDate = new Date(o.timestamp);
+                    return orderDate >= startOfDay && orderDate <= endOfDay;
+                })
+                .reduce((sum, o) => sum + o.total, 0);
+        }
+
+        const itemSales = {};
+        paidOrders.forEach(order => {
+            order.items.forEach(item => {
+                const menuItem = db.menuItems.find(m => m.id === item.itemId);
+                if (menuItem) {
+                    if (!itemSales[menuItem.name]) {
+                        itemSales[menuItem.name] = { quantity: 0, revenue: 0 };
+                    }
+                    itemSales[menuItem.name].quantity += item.qty;
+                    itemSales[menuItem.name].revenue += item.qty * menuItem.price;
+                }
+            });
+        });
+        const topSellingItems = Object.entries(itemSales)
+            .map(([name, data]) => ({ name, ...data }))
+            .sort((a, b) => b.quantity - a.quantity)
+            .slice(0, 5);
+
+        const salesByCategory = {};
+        db.menuItems.forEach(m => salesByCategory[m.category] = 0);
+        paidOrders.forEach(order => {
+            order.items.forEach(item => {
+                const menuItem = db.menuItems.find(m => m.id === item.itemId);
+                if (menuItem) {
+                    salesByCategory[menuItem.category] += item.qty * menuItem.price;
+                }
+            });
+        });
+
+        const salesByHour = Array(24).fill(0);
+        paidOrders.forEach(order => {
+            const hour = new Date(order.timestamp).getHours();
+            salesByHour[hour] += order.total;
+        });
+
+        return {
+            salesToday,
+            salesThisMonth,
+            billsToday,
+            avgPerBill,
+            salesByDay: { labels: dayLabels, data: salesByDay },
+            topSellingItems,
+            salesByCategory,
+            salesByHour,
+        };
+    }
+    
+    function getDashboardData() {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        const paidOrdersToday = db.orders.filter(o => o.status === 'paid' && new Date(o.timestamp) >= today);
+        const salesToday = paidOrdersToday.reduce((sum, o) => sum + o.total, 0);
+        
+        const totalOrdersToday = db.orders.filter(o => new Date(o.timestamp) >= today).length;
+        
+        const occupiedTables = db.tables.filter(t => t.status !== 'vacant').length;
+        const totalTables = db.tables.length;
+
+        const pendingOrders = db.orders.filter(o => o.status !== 'paid' && o.status !== 'delivered').length;
+
+        return {
+            salesToday,
+            totalOrdersToday,
+            occupiedTables,
+            totalTables,
+            pendingOrders
+        };
+    }
+
+    // --- Chart.js Setup ---
+    function setupDashboardCharts() {
+        const reportData = generateReportData();
+
+        const salesCtx = document.getElementById('dashboardSalesChart')?.getContext('2d');
+        if (salesCtx) {
+            new Chart(salesCtx, {
+                type: 'line',
+                data: {
+                    labels: reportData.salesByDay.labels,
+                    datasets: [{
+                        label: 'ยอดขาย',
+                        data: reportData.salesByDay.data,
+                        borderColor: 'rgba(249, 115, 22, 1)',
+                        backgroundColor: 'rgba(251, 146, 60, 0.2)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            });
+        }
+
+        const categoryCtx = document.getElementById('dashboardCategoryChart')?.getContext('2d');
+        if (categoryCtx) {
+            new Chart(categoryCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(reportData.salesByCategory),
+                    datasets: [{
+                        label: 'ยอดขาย',
+                        data: Object.values(reportData.salesByCategory),
+                        backgroundColor: ['#f97316', '#22c55e', '#3b82f6', '#ef4444', '#f59e0b'],
+                        hoverOffset: 4
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+            });
+        }
+    }
+
+
+    function setupReportCharts() {
+        const reportData = generateReportData();
+
+        const salesTrendCtx = document.getElementById('salesTrendChart')?.getContext('2d');
+        if(salesTrendCtx) {
+            new Chart(salesTrendCtx, {
+                type: 'line',
+                data: { labels: reportData.salesByDay.labels, datasets: [{ label: 'ยอดขาย', data: reportData.salesByDay.data, borderColor: 'rgba(249, 115, 22, 1)', backgroundColor: 'rgba(251, 146, 60, 0.2)', borderWidth: 2, fill: true, tension: 0.4 }] },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            });
+        }
+
+        const categoryCtx = document.getElementById('categoryChart')?.getContext('2d');
+        if(categoryCtx) {
+            new Chart(categoryCtx, {
+                type: 'doughnut',
+                data: { labels: Object.keys(reportData.salesByCategory), datasets: [{ label: 'ยอดขาย', data: Object.values(reportData.salesByCategory), backgroundColor: ['#f97316', '#22c55e', '#3b82f6', '#ef4444', '#f59e0b'], hoverOffset: 4 }] },
+                options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+            });
+        }
+
+        const peakHoursCtx = document.getElementById('peakHoursChart')?.getContext('2d');
+        if(peakHoursCtx) {
+            new Chart(peakHoursCtx, {
+                type: 'bar',
+                data: { labels: Array.from({length: 24}, (_, i) => `${i}:00`), datasets: [{ label: 'ยอดขายรายชั่วโมง', data: reportData.salesByHour, backgroundColor: 'rgba(59, 130, 246, 0.5)', borderColor: 'rgba(59, 130, 246, 1)', borderWidth: 1 }] },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            });
+        }
+    }
+
+    // --- Initial Load ---
+    document.addEventListener('DOMContentLoaded', () => {
+        lucide.createIcons();
+    });
+
+    </script>
+</body>
+</html>
